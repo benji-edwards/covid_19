@@ -1,13 +1,13 @@
 ---
-title: "covid_19_analysis"
+title: "Testing the Linear Relationship Between Cases and Deaths"
 author: "Benji Edwards"
 date: "`r Sys.Date()`"
 output: github_document
 ---
-Is state an indicator for COVID deaths?
+Research Question: Are cases an indicator for COVID deaths? If so, how strong is this relationship?
 
 # Import
-Load R packages and data from Johns Hopkins COVID-19 repository. This data includes case reports from January 21, 2020 to March 10, 2023.
+Load R packages and data from Johns Hopkins COVID-19 repository. This data includes case reports from January 21, 2020 to March 9, 2023.
 ```{r Import}
 # Load in R packages and data
 library(tidyverse)
@@ -17,7 +17,7 @@ us_covid_cases <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COV
 us_covid_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
 
 ```
-#Inspect
+# Inspect
 Let's take a look at the data that we've imported.
 ```{r Inspect}
 
@@ -32,56 +32,78 @@ tail(us_covid_deaths)
 ```
 
 # Tidy
-Now let's tidy the data so it can be analyzed. I want to summarize all of the cases and deaths by county. Upon further inspection of my data, it looks like we've got a running sum of cases and deaths by the date columns. Keep the last date column will give me my totals for each county.
+Now let's tidy the data so it can be analyzed. I want to summarize all of the cases and deaths by county. Upon further inspection of my data, it looks like we've got a running sum of cases and deaths by the date columns. Keeping the last date ("3/9/23") column will give me my totals for each county.
 ```{r Tidy cases}
-# Let's start by dropping all the columns we don't need 
+# Let's start by keeping only the columns we're interested in.
 us_cases_clean <- us_covid_cases %>%
-  select(-c('Lat', 'Long_', 'UID', 'iso2', 'iso3', 'code3', 'FIPS', 'Country_Region', 'Combined_Key'))
+  select(c('Admin2', 'Province_State', '3/9/23'))
 
-# Now pivot on the county and state columns
-us_cases_clean <-  us_cases_clean %>%
-  pivot_longer(cols = -c('Admin2', 'Province_State'),
-               names_to = "date",
-               values_to = "cases")
+# Rename "Admin2" and "3/9/23"
+us_cases_clean <- rename(us_cases_clean, County = Admin2, Cases = '3/9/23')
 
-us_cases_clean <- us_cases_clean %>%
-  filter(!grepl("Population", date))
-
-# Finally, let's group by county
-us_county_cases <- us_cases_clean %>%
-  group_by(Admin2, Province_State) %>%
-  summarise(cases = sum(cases))
-
-us_county_cases
-
+# Inspect data
+head(us_cases_clean)
 ```
 
 Let's repeat this for 'us_covid_deaths'
 ```{r Tidy deaths}
 # Remove unwanted columns
 us_deaths_clean <- us_covid_deaths %>%
-  select(-c('Lat', 'Long_', 'UID', 'iso2', 'iso3', 'code3', 'FIPS', 'Country_Region', 'Combined_Key'))
+  select(c('Admin2', 'Province_State', '3/9/23'))
 
-# Pivot by county and state
-us_deaths_clean <-  us_deaths_clean %>%
-  pivot_longer(cols = -c('Admin2', 'Province_State'),
-               names_to = "date",
-               values_to = "deaths")
-# Inspect data
-us_deaths_clean
-
-# I found the word "Population" in my date columns. Let's drop any rows with "Population".
-
-us_deaths_clean <- us_deaths_clean %>%
-  filter(!grepl("Population", date))
+# Rename "Admin2" and "3/9/23"
+us_deaths_clean <- rename(us_deaths_clean, County = Admin2, Deaths = '3/9/23')
 
 # Inspect data
-us_deaths_clean
-
-
+head(us_deaths_clean)
 ```
+# Transform, Visualize & Model
 Excellent! It looks like our two dataframes have the same number of rows. Looks like we're ready to merge them together.
 ``` {r Merge data}
-us_covid <- merge(us_cases_clean, us_deaths_clean, by = c("Admin2", "Province_State"))
-us_covid
+# Merge deaths and cases by county and state
+covid_data <- merge(us_cases_clean, us_deaths_clean, by = c("County", "Province_State"))
+
+# Inspect data
+head(covid_data)
+
+#check for nulls
+sum(is.na(covid_data))
+
+# Drop nulls
+covid_data <- na.omit(covid_data)
 ```
+Now that I have my combined data, let's visualize it.
+```{r Scatter}
+ggplot(covid_data, aes(x=Cases, y=Deaths)) +
+  geom_point() +
+  labs(title="COVID-19 Cases vs. Deaths by State",
+       x="Total Cases",
+       y="Total Deaths") +
+  theme_minimal()
+```
+
+It seems like there is clearly a linear relationship. Let's test using linear regression.
+```{r Linear Regression}
+model <- lm(Deaths ~ Cases, data=covid_data)
+
+# Summarize the linear model
+summary(model)
+```
+
+Based on our extremely low p-value and high r-square, our linear model suggests a strong relationship with a good model fit. Let's place our line on the scatter plot.
+```{r Model Fit}
+ggplot(covid_data, aes(x=Cases, y=Deaths)) +
+  geom_point() +
+  geom_smooth(method="lm", col="red") +
+  labs(title="Linear Model Fit: COVID-19 Cases vs. Deaths by State",
+       x="Total Cases",
+       y="Total Deaths") +
+  theme_minimal()
+```
+
+# Communicate Results
+As expected, there is a strong relationship between cases and deaths. The p-value was less than 2.2e-16 (extremely small), indicating a significant relationship between the two. Additionally, the r-squared was 0.9225 (very high), which indicates that the linear regression model is a good fit for the data.
+
+In future analysis, we could investigate whether the state was an indicator of COVID deaths. From there, we could look at state with the highest and lowest mortality and research their COVID policies to infer which policies produced the safest, or least safe, environment.
+
+Bias for this data may come from how COVID deaths are defined. In the hospital setting, many people are there for other life threatening emergencies, and may have been exposed to COVID before death. If their leading of death was something other than COVID, they still may have been characterized as a COVID death since COVID was a contributing factor. Perhaps some healthcare settings had biases on whether to include COVID, or not, as a contributing cause of death.
