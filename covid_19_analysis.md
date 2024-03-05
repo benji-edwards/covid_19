@@ -112,7 +112,8 @@ head(us_covid_deaths)
 
 # Tidy
 
-Now let’s tidy the data so it can be analyzed.
+Now let’s tidy the data so it can be analyzed. I want to summarize all
+of the cases and deaths by county.
 
 ``` r
 us_cases_clean <- us_covid_cases %>%
@@ -138,3 +139,7 @@ us_cases_clean
     ##  9 Autauga Alabama        1/30/20     0
     ## 10 Autauga Alabama        1/31/20     0
     ## # ℹ 3,819,896 more rows
+
+``` r
+# Let's repeat this for {us_covid_deaths}
+```
